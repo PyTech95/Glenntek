@@ -52,6 +52,8 @@ export default function AdminProducts() {
     specifications: "{}",
     seo_title: "",
     seo_description: "",
+    is_active: true,
+    slug: "",
   });
 
   useEffect(() => {
@@ -83,20 +85,31 @@ export default function AdminProducts() {
     e.preventDefault();
     try {
       const data = {
-        ...formData,
-        price: parseFloat(formData.price),
+        name: formData.name.trim(),
+        slug: formData.slug?.trim() || null,
+        description: formData.description.trim(),
+        category: formData.category.trim(),
+        price: parseFloat(formData.price) || 0,
         compare_price: formData.compare_price
           ? parseFloat(formData.compare_price)
           : null,
-        stock_quantity: parseInt(formData.stock_quantity),
-        low_stock_threshold: parseInt(formData.low_stock_threshold),
+        sku: formData.sku.trim(),
+        images: formData.images || [],
+        stock_quantity: parseInt(formData.stock_quantity) || 0,
+        low_stock_threshold: parseInt(formData.low_stock_threshold) || 10,
         tags: formData.tags
-          ? formData.tags.split(",").map((t) => t.trim())
+          ? formData.tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
           : [],
         specifications: formData.specifications
           ? JSON.parse(formData.specifications)
           : {},
         variants: [],
+        seo_title: formData.seo_title?.trim() || null,
+        seo_description: formData.seo_description?.trim() || null,
+        is_active: !!formData.is_active,
       };
 
       if (editingProduct) {
@@ -120,6 +133,7 @@ export default function AdminProducts() {
     setEditingProduct(product);
     setFormData({
       name: product.name,
+      slug: product.slug || "",
       description: product.description,
       category: product.category,
       price: product.price.toString(),
@@ -132,6 +146,7 @@ export default function AdminProducts() {
       specifications: JSON.stringify(product.specifications || {}),
       seo_title: product.seo_title || "",
       seo_description: product.seo_description || "",
+      is_active: product.is_active ?? true,
     });
     setDialogOpen(true);
   };
@@ -164,6 +179,8 @@ export default function AdminProducts() {
       specifications: "{}",
       seo_title: "",
       seo_description: "",
+      is_active: true,
+      slug: "",
     });
     setImageUrl("");
   };
@@ -223,6 +240,60 @@ export default function AdminProducts() {
     }
   };
 
+  const clean = (v) => (v ?? "").toString().trim();
+
+  const toFloat = (v, fallback = 0) => {
+    const n = parseFloat(clean(v));
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const toNullableFloat = (v) => {
+    const s = clean(v);
+    if (!s) return null;
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const toInt = (v, fallback = 0) => {
+    const n = parseInt(clean(v), 10);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const toBool = (v, fallback = true) => {
+    const s = clean(v).toLowerCase();
+    if (!s) return fallback;
+    if (["true", "1", "yes", "y"].includes(s)) return true;
+    if (["false", "0", "no", "n"].includes(s)) return false;
+    return fallback;
+  };
+
+  // tags/images: "a;b;c"
+  const parseList = (v) => {
+    const s = clean(v);
+    return s
+      ? s
+          .split(";")
+          .map((x) => x.trim())
+          .filter(Boolean)
+      : [];
+  };
+
+  // specifications/variants: JSON string
+  const parseJSON = (v, fallback) => {
+    const s = clean(v);
+    if (!s) return fallback;
+    try {
+      return JSON.parse(s);
+    } catch {
+      return fallback;
+    }
+  };
+
+  const getVal = (headers, values, key) => {
+    const idx = headers.indexOf(key);
+    return idx >= 0 ? values[idx] : "";
+  };
+
   const handleBulkUpload = async () => {
     if (!csvFile) {
       toast.error("Please select a CSV file");
@@ -231,45 +302,67 @@ export default function AdminProducts() {
 
     try {
       const text = await csvFile.text();
-      const lines = text.split("\n").filter((line) => line.trim());
+
+      // ✅ IMPORTANT: remove \r (windows) + trim
+      const lines = text
+        .split("\n")
+        .map((l) => l.replace("\r", "").trim())
+        .filter(Boolean);
 
       if (lines.length < 2) {
         toast.error("CSV file is empty or invalid");
         return;
       }
 
-      const headers = lines[0].split(",").map((h) => h.trim());
+      const headers = lines[0].split(",").map((h) => h.trim()); // must match CSV header exactly
+
       let successCount = 0;
       let errorCount = 0;
 
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(",").map((v) => v.trim());
-        if (values.length < headers.length) continue;
+        if (!values.length) continue;
 
+        // ✅ Product model mapping
         const productData = {
-          name: values[headers.indexOf("name")] || "",
-          description: values[headers.indexOf("description")] || "",
-          category: values[headers.indexOf("category")] || "",
-          price: parseFloat(values[headers.indexOf("price")]) || 0,
-          compare_price: values[headers.indexOf("compare_price")]
-            ? parseFloat(values[headers.indexOf("compare_price")])
-            : null,
-          sku: values[headers.indexOf("sku")] || "",
-          stock_quantity:
-            parseInt(values[headers.indexOf("stock_quantity")]) || 0,
-          low_stock_threshold:
-            parseInt(values[headers.indexOf("low_stock_threshold")]) || 10,
-          tags: values[headers.indexOf("tags")]
-            ? values[headers.indexOf("tags")].split(";")
-            : [],
-          specifications: {},
-          variants: [],
+          name: clean(getVal(headers, values, "name")),
+          slug: clean(getVal(headers, values, "slug")) || null,
+          description: clean(getVal(headers, values, "description")),
+          category: clean(getVal(headers, values, "category")),
+          price: toFloat(getVal(headers, values, "price"), 0),
+          compare_price: toNullableFloat(
+            getVal(headers, values, "compare_price")
+          ),
+          sku: clean(getVal(headers, values, "sku")),
+          images: parseList(getVal(headers, values, "images")),
+          variants: parseJSON(getVal(headers, values, "variants"), []),
+          stock_quantity: toInt(getVal(headers, values, "stock_quantity"), 0),
+          low_stock_threshold: toInt(
+            getVal(headers, values, "low_stock_threshold"),
+            10
+          ),
+          tags: parseList(getVal(headers, values, "tags")),
+          specifications: parseJSON(
+            getVal(headers, values, "specifications"),
+            {}
+          ),
+          seo_title: clean(getVal(headers, values, "seo_title")) || null,
+          seo_description:
+            clean(getVal(headers, values, "seo_description")) || null,
+          is_active: toBool(getVal(headers, values, "is_active"), true),
         };
+
+        // ✅ basic validation
+        if (!productData.name || !productData.sku) {
+          errorCount++;
+          continue;
+        }
 
         try {
           await axios.post(`${API}/products`, productData);
           successCount++;
         } catch (error) {
+          console.error(`Row ${i + 1} failed`, error?.response?.data || error);
           errorCount++;
         }
       }
@@ -281,16 +374,17 @@ export default function AdminProducts() {
       setCsvFile(null);
       fetchProducts();
     } catch (error) {
+      console.error(error);
       toast.error("Failed to process CSV file");
     }
   };
 
   const downloadSampleCSV = () => {
-    const sampleData = `name,description,category,price,compare_price,sku,stock_quantity,low_stock_threshold,tags
-Premium Case,High-quality phone case,cases,29.99,39.99,CASE-001,100,10,premium;case;protective
-Fast Charger,65W USB-C charger,chargers,44.99,,CHG-001,50,10,fast-charge;USB-C`;
+    const sample = `name,slug,description,category,price,compare_price,sku,images,stock_quantity,low_stock_threshold,tags,specifications,variants,seo_title,seo_description,is_active
+"Premium Case",,"High-quality phone case",cases,29.99,39.99,CASE-001,"/img/case1.jpg;/img/case2.jpg",100,10,"premium;case;protective","{""color"":""black"",""material"":""TPU""}","[]","Premium Case SEO","Best premium phone case",true
+"Fast Charger","fast-charger-65w","65W USB-C charger",chargers,44.99,,CHG-001,"/img/charger.jpg",50,10,"fast-charge;USB-C","{""watt"":65}","[]","Fast Charger SEO","65W fast charger",true`;
 
-    const blob = new Blob([sampleData], { type: "text/csv" });
+    const blob = new Blob([sample], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

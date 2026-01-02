@@ -97,8 +97,10 @@ class Product(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ProductCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore") 
+
     name: str
-    slug: Optional[str] = None  # Auto-generated from name if not provided
+    slug: Optional[str] = None 
     description: str
     category: str
     price: float
@@ -112,6 +114,7 @@ class ProductCreate(BaseModel):
     specifications: Dict[str, Any] = {}
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
+    is_active: bool = True  
 
 class Category(BaseModel):
     model_config = ConfigDict(extra="ignore")
