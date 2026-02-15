@@ -39,11 +39,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get('ACCESS_TOKEN_EXPIRE_MINUTES', 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
-# Setup static files for uploaded images
-STATIC_DIR = Path("/app/backend/static")
-UPLOAD_DIR = STATIC_DIR / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ========== MODELS ==========
 
