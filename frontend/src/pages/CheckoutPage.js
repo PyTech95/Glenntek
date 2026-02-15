@@ -32,7 +32,7 @@ export default function CheckoutPage() {
 
   const subtotal = cart.reduce(
     (sum, item) => sum + item.price * item.quantity,
-    0
+    0,
   );
   const shipping = subtotal > 50 ? 0 : 5;
   const tax = subtotal * 0.23;
@@ -90,13 +90,13 @@ export default function CheckoutPage() {
         },
       };
 
-      const response = await axios.post(`${API}/orders`, orderData);
+      const token = localStorage.getItem("token");
 
-      // Update order payment status (in production, this would be done by payment gateway)
-      await axios.put(`${API}/orders/${response.data.id}/status`, null, {
-        params: { status: "processing" },
+      const response = await axios.post(`${API}/orders`, orderData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
-
       clearCart();
       toast.success("Order placed successfully!");
       navigate(`/orders/${response.data.id}`);
