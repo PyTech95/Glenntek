@@ -1238,50 +1238,51 @@ import base64
 from fastapi.responses import Response
 
 @api_router.post("/upload-image")
-async def upload_image(file: UploadFile = File(...), admin: User = Depends(get_admin_user)):
-    """Upload image and store in database as Base64"""
-    try:
-        # Validate file type
-        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-        if file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail="Invalid file type. Allowed: jpeg, png, gif, webp")
-        
-        # Read file contents
-        contents = await file.read()
-        
-        # Check file size (limit to 5MB)
-        if len(contents) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB")
-        
-        # Generate unique ID for the image
-        image_id = str(uuid.uuid4())
-        file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else 'jpg'
-        
-        # Encode to Base64
-        base64_data = base64.b64encode(contents).decode('utf-8')
-        
-        # Store in database
-        image_doc = {
-            "id": image_id,
-            "filename": file.filename,
-            "content_type": file.content_type,
-            "size": len(contents),
-            "data": base64_data,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "uploaded_by": admin.id
-        }
-        
-        await db.images.insert_one(image_doc)
-        
-        # Return URL that points to our image serving endpoint
-        base_url = os.environ.get('BACKEND_BASE_URL', '')
-        image_url = f"{base_url}/api/images/{image_id}"
-        
-        return {"url": image_url, "filename": file.filename, "id": image_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+async def upload_image(
+    file: UploadFile = File(...),
+    admin: User = Depends(get_admin_user)
+):
+    """
+    Upload image and store in database as Base64
+    """
+    allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Allowed: jpeg, png, gif, webp"
+        )
+
+    contents = await file.read()
+
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="File too large. Maximum size is 5MB"
+        )
+
+    image_id = str(uuid.uuid4())
+
+    image_doc = {
+        "id": image_id,
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "size": len(contents),
+        "data": base64.b64encode(contents).decode("utf-8"),
+        "created_at": datetime.now(timezone.utc),
+        "uploaded_by": admin.id
+    }
+
+    await db.images.insert_one(image_doc)
+
+    base_url = os.getenv("BACKEND_BASE_URL", "").rstrip("/")
+    image_url = f"{base_url}/api/images/{image_id}"
+
+    return {
+        "id": image_id,
+        "filename": file.filename,
+        "url": image_url
+    }
 
 @api_router.get("/images/{image_id}")
 async def get_image(image_id: str):
