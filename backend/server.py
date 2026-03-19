@@ -1811,7 +1811,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins = [
-    "http://glenntek.pt",
+    "http://glenntek.",
     "https://glenntek.pt"
     ],
     allow_methods=["*"],
