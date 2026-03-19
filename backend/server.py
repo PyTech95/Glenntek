@@ -1810,7 +1810,10 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["https://glenntek.onrender.com", "https://glenntek.onrender.com"],
+    allow_origins = [
+    "http://glenntek.pt",
+    "https://glenntek.pt"
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
