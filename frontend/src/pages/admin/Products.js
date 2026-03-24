@@ -14,6 +14,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -32,6 +39,9 @@ export default function AdminProducts() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [limit, setLimit] = useState(25);
+  const [skip, setSkip] = useState(0);
+  const [total, setTotal] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [search, setSearch] = useState("");
@@ -57,14 +67,22 @@ export default function AdminProducts() {
   });
 
   useEffect(() => {
-    fetchProducts();
     fetchCategories();
   }, []);
 
+  useEffect(() => {
+    fetchProducts();
+  }, [limit, skip, search]);
+
   const fetchProducts = async () => {
+    setLoading(true);
     try {
-      const response = await axios.get(`${API}/products?limit=100`);
-      setProducts(response.data);
+      const res = await axios.get(
+        `${API}/Allproducts?limit=${limit}&skip=${skip}&search=${search}`,
+      );
+
+      setProducts(res.data.data);
+      setTotal(res.data.total);
     } catch (error) {
       toast.error("Failed to load products");
     } finally {
@@ -331,7 +349,7 @@ export default function AdminProducts() {
           category: clean(getVal(headers, values, "category")),
           price: toFloat(getVal(headers, values, "price"), 0),
           compare_price: toNullableFloat(
-            getVal(headers, values, "compare_price")
+            getVal(headers, values, "compare_price"),
           ),
           sku: clean(getVal(headers, values, "sku")),
           images: parseList(getVal(headers, values, "images")),
@@ -339,12 +357,12 @@ export default function AdminProducts() {
           stock_quantity: toInt(getVal(headers, values, "stock_quantity"), 0),
           low_stock_threshold: toInt(
             getVal(headers, values, "low_stock_threshold"),
-            10
+            10,
           ),
           tags: parseList(getVal(headers, values, "tags")),
           specifications: parseJSON(
             getVal(headers, values, "specifications"),
-            {}
+            {},
           ),
           seo_title: clean(getVal(headers, values, "seo_title")) || null,
           seo_description:
@@ -368,7 +386,7 @@ export default function AdminProducts() {
       }
 
       toast.success(
-        `Imported ${successCount} products successfully. ${errorCount} errors.`
+        `Imported ${successCount} products successfully. ${errorCount} errors.`,
       );
       setBulkDialogOpen(false);
       setCsvFile(null);
@@ -396,7 +414,7 @@ export default function AdminProducts() {
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase())
+      p.sku.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -410,6 +428,53 @@ export default function AdminProducts() {
             Products
           </h1>
           <div className="flex gap-3">
+            <div className="flex items-center gap-3">
+              {/* LIMIT DROPDOWN */}
+              <Select
+                value={limit.toString()}
+                onValueChange={(value) => {
+                  setLimit(Number(value));
+                  setSkip(0); // reset page
+                }}
+              >
+                <SelectTrigger className="w-[80px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="75">75</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* RANGE TEXT */}
+              <h6 className="text-sm text-gray-600">
+                {total === 0
+                  ? "0 results"
+                  : `${skip + 1} - ${Math.min(skip + limit, total)} of ${total}`}
+              </h6>
+
+              {/* PREV BUTTON */}
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={skip === 0}
+                onClick={() => setSkip((prev) => Math.max(0, prev - limit))}
+              >
+                ⬅
+              </Button>
+
+              {/* NEXT BUTTON */}
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={skip + limit >= total}
+                onClick={() => setSkip((prev) => prev + limit)}
+              >
+                ➡
+              </Button>
+            </div>
             <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" data-testid="bulk-upload-button">
@@ -653,8 +718,8 @@ export default function AdminProducts() {
                                 img instanceof File
                                   ? URL.createObjectURL(img)
                                   : img.startsWith("http")
-                                  ? img
-                                  : `${BACKEND_URL}${img}`
+                                    ? img
+                                    : `${BACKEND_URL}${img}`
                               }
                               alt={`Product ${index + 1}`}
                               className="w-full h-24 object-cover rounded border"
