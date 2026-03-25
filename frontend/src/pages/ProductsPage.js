@@ -25,12 +25,19 @@ export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [category, setCategory] = useState(
-    searchParams.get("category") || "all"
+    searchParams.get("category") || "all",
   );
+
   const [priceRange, setPriceRange] = useState([0, 200]);
   const [sortBy, setSortBy] = useState("name");
+
+  // ✅ NEW STATES
+  const [limit, setLimit] = useState(25);
+  const [skip, setSkip] = useState(0);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     fetchCategories();
@@ -38,7 +45,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchProducts();
-  }, [searchParams]);
+  }, [searchParams, limit, skip]);
 
   const fetchCategories = async () => {
     try {
@@ -63,8 +70,18 @@ export default function ProductsPage() {
       if (searchParams.get("max_price"))
         params.append("max_price", searchParams.get("max_price"));
 
-      const response = await axios.get(`${API}/products?${params.toString()}`);
-      let filteredProducts = response.data;
+      // ✅ ADD PAGINATION PARAMS
+      params.append("limit", limit);
+      params.append("skip", skip);
+
+      const response = await axios.get(
+        `${API}/products/all?${params.toString()}`,
+      );
+
+      let filteredProducts = response.data.products;
+
+      // ✅ SET TOTAL
+      setTotal(response.data.total);
 
       // Sort products
       if (sortBy === "price-asc") {
@@ -89,6 +106,8 @@ export default function ProductsPage() {
     if (category && category !== "all") params.set("category", category);
     if (priceRange[0] > 0) params.set("min_price", priceRange[0].toString());
     if (priceRange[1] < 200) params.set("max_price", priceRange[1].toString());
+
+    setSkip(0); // reset page
     setSearchParams(params);
   };
 
@@ -96,6 +115,7 @@ export default function ProductsPage() {
     setSearch("");
     setCategory("all");
     setPriceRange([0, 200]);
+    setSkip(0);
     setSearchParams({});
   };
 
@@ -103,20 +123,14 @@ export default function ProductsPage() {
     <Layout>
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1
-            className="text-4xl font-bold mb-4"
-            style={{ fontFamily: "Space Grotesk" }}
-            data-testid="products-title"
-          >
-            Products
-          </h1>
+          <h1 className="text-4xl font-bold mb-4">Products</h1>
           <p className="text-gray-600">
             Discover our premium collection of mobile accessories
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Filters Sidebar */}
+          {/* Sidebar */}
           <div className="lg:col-span-1">
             <Card className="sticky top-24" data-testid="filters-panel">
               <CardContent className="p-6">
@@ -210,56 +224,74 @@ export default function ProductsPage() {
             </Card>
           </div>
 
-          {/* Products Grid */}
+          {/* Products */}
           <div className="lg:col-span-3">
             <div className="flex justify-between items-center mb-6">
-              <p className="text-gray-600" data-testid="products-count">
-                {products.length} products found
-              </p>
+              {/* ✅ PAGINATION UI */}
+              <div className="flex items-center gap-3">
+                <Select
+                  value={limit.toString()}
+                  onValueChange={(value) => {
+                    setLimit(Number(value));
+                    setSkip(0);
+                  }}
+                >
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <h6 className="text-sm text-gray-600">
+                  {total === 0
+                    ? "0 results"
+                    : `${skip + 1} - ${Math.min(skip + limit, total)} of ${total}`}
+                </h6>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={skip === 0}
+                  onClick={() => setSkip((prev) => Math.max(0, prev - limit))}
+                >
+                  ⬅
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={skip + limit >= total}
+                  onClick={() => setSkip((prev) => prev + limit)}
+                >
+                  ➡
+                </Button>
+              </div>
+
+              {/* SORT */}
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-48" data-testid="sort-select">
-                  <SelectValue placeholder="Sort by" />
+                <SelectTrigger className="w-48">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="price-asc">Price: Low to High</SelectItem>
-                  <SelectItem value="price-desc">Price: High to Low</SelectItem>
+                  <SelectItem value="price-asc">Price ↑</SelectItem>
+                  <SelectItem value="price-desc">Price ↓</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
+            {/* GRID */}
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <Card key={i} className="overflow-hidden">
-                    <div className="aspect-square bg-gray-200 animate-pulse"></div>
-                    <CardContent className="p-4">
-                      <div className="h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
-                      <div className="h-4 bg-gray-200 rounded animate-pulse w-2/3"></div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <p>Loading...</p>
             ) : products.length === 0 ? (
-              <div className="text-center py-20">
-                <ShoppingBag className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold mb-2">
-                  No products found
-                </h3>
-                <p className="text-gray-600 mb-4">Try adjusting your filters</p>
-                <Button onClick={clearFilters}>Clear Filters</Button>
-              </div>
+              <p>No products found</p>
             ) : (
-              <div
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-                data-testid="products-grid"
-              >
+              <div className="grid grid-cols-3 gap-6">
                 {products.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    showActions={true}
-                  />
+                  <ProductCard key={product.id} product={product} />
                 ))}
               </div>
             )}
