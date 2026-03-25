@@ -662,6 +662,57 @@ async def get_products(
     }
     
 
+@api_router.get("/products/all")
+async def get_products(
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    tags: Optional[str] = None,
+    limit: int = Query(25, le=100),
+    skip: int = Query(0)
+):
+    query = {"is_active": True}
+
+    if category:
+        query["category"] = category
+
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"description": {"$regex": search, "$options": "i"}}
+        ]
+
+    if min_price is not None or max_price is not None:
+        query["price"] = {}
+        if min_price is not None:
+            query["price"]["$gte"] = min_price
+        if max_price is not None:
+            query["price"]["$lte"] = max_price
+
+    if tags:
+        tag_list = tags.split(",")
+        query["tags"] = {"$in": tag_list}
+
+    # ✅ TOTAL COUNT
+    total = await db.products.count_documents(query)
+
+    # ✅ PAGINATED DATA
+    products = await db.products.find(query, {"_id": 0}) \
+        .skip(skip).limit(limit).to_list(limit)
+
+    # datetime fix
+    for product in products:
+        if isinstance(product.get('created_at'), str):
+            product['created_at'] = datetime.fromisoformat(product['created_at'])
+        if isinstance(product.get('updated_at'), str):
+            product['updated_at'] = datetime.fromisoformat(product['updated_at'])
+
+    return {
+        "total": total,
+        "products": products
+    }
+
 @api_router.get("/products", response_model=List[Product])
 async def get_products(
     category: Optional[str] = None,
@@ -1863,8 +1914,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins = [
-    "http://glenntek.pt",
-    "https://glenntek.pt"
+     "http://localhost:3000",
+    "http://127.0.0.1:3000"
     ],
     allow_methods=["*"],
     allow_headers=["*"],
