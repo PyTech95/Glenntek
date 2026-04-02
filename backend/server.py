@@ -773,64 +773,124 @@ async def get_product(value: str, request: Request):
 
     return Product(**product)
 
+def generate_slug(name: str):
+    return name.strip().lower().replace(" ", "-")
+
+def generate_sku(prefix="GLENN"):
+    number = random.randint(10000, 99999)  
+    return f"{prefix}{number}"
 
 @api_router.post("/products", response_model=Product)
-async def create_product(product_data: ProductCreate, admin: User = Depends(get_admin_user)):
+async def create_product(
+    product_data: ProductCreate,
+    admin: User = Depends(get_admin_user)
+):
     product_dict = product_data.model_dump()
-    
-    # Auto-generate slug if not provided
-    if not product_dict.get('slug'):
-        base_slug = generate_slug(product_dict['name'])
+
+    if not product_dict.get("slug"):
+        base_slug = generate_slug(product_dict["name"])
         slug = base_slug
         counter = 1
-        # Ensure slug is unique
+
         while await db.products.find_one({"slug": slug}):
             slug = f"{base_slug}-{counter}"
             counter += 1
-        product_dict['slug'] = slug
-    
+
+        product_dict["slug"] = slug
+
+    if not product_dict.get("sku"):
+        while True:
+            sku = generate_sku("GLENN")
+
+            existing = await db.products.find_one({"sku": sku})
+            if not existing:
+                product_dict["sku"] = sku
+                break
+
     product = Product(**product_dict)
     product_doc = product.model_dump()
-    product_doc['created_at'] = product_doc['created_at'].isoformat()
-    product_doc['updated_at'] = product_doc['updated_at'].isoformat()
-    
-    await db.products.insert_one(product_doc)
+
+    if isinstance(product_doc.get("created_at"), datetime):
+        product_doc["created_at"] = product_doc["created_at"].isoformat()
+
+    if isinstance(product_doc.get("updated_at"), datetime):
+        product_doc["updated_at"] = product_doc["updated_at"].isoformat()
+
+    try:
+        await db.products.insert_one(product_doc)
+    except DuplicateKeyError:
+        return {"error": "SKU already exists, try again"}
+
     return product
 
 @api_router.put("/products/{product_id}", response_model=Product)
-async def update_product(product_id: str, product_data: ProductCreate, admin: User = Depends(get_admin_user)):
+async def update_product(
+    product_id: str,
+    product_data: ProductCreate,
+    admin: User = Depends(get_admin_user)
+):
     existing = await db.products.find_one({"id": product_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     update_data = product_data.model_dump()
-    
-    # Auto-generate slug if name changed and no slug provided
+
     if not update_data.get('slug') or update_data['name'] != existing.get('name'):
         base_slug = generate_slug(update_data['name'])
         slug = base_slug
         counter = 1
-        # Ensure slug is unique (excluding current product)
+
         while True:
-            existing_slug = await db.products.find_one({"slug": slug, "id": {"$ne": product_id}})
+            existing_slug = await db.products.find_one({
+                "slug": slug,
+                "id": {"$ne": product_id}  
+            })
             if not existing_slug:
                 break
             slug = f"{base_slug}-{counter}"
             counter += 1
+
         update_data['slug'] = slug
-    
+    if update_data.get("sku"):
+        existing_sku = await db.products.find_one({
+            "sku": update_data["sku"],
+            "id": {"$ne": product_id}
+        })
+
+        if existing_sku:
+            raise HTTPException(status_code=400, detail="SKU already exists")
+
+    else:
+        while True:
+            sku = generate_sku("GLENN")
+
+            existing_sku = await db.products.find_one({
+                "sku": sku,
+                "id": {"$ne": product_id}
+            })
+
+            if not existing_sku:
+                update_data["sku"] = sku
+                break
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-    
-    await db.products.update_one({"id": product_id}, {"$set": update_data})
-    
-    updated_product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    await db.products.update_one(
+        {"id": product_id},
+        {"$set": update_data}
+    )
+
+    updated_product = await db.products.find_one(
+        {"id": product_id},
+        {"_id": 0}
+    )
+
+    # Convert back to datetime
     if isinstance(updated_product.get('created_at'), str):
         updated_product['created_at'] = datetime.fromisoformat(updated_product['created_at'])
+
     if isinstance(updated_product.get('updated_at'), str):
         updated_product['updated_at'] = datetime.fromisoformat(updated_product['updated_at'])
-    
-    return Product(**updated_product)
 
+    return Product(**updated_product)
 @api_router.delete("/products/{product_id}")
 async def delete_product(product_id: str, admin: User = Depends(get_admin_user)):
     result = await db.products.delete_one({"id": product_id})
@@ -1915,7 +1975,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_origins = [
     "http://glenntek.pt",
-    "https://glenntek.pt"
+    "https://glenntek.pt",
+    "http://localhost:3000"
     ],
     allow_methods=["*"],
     allow_headers=["*"],

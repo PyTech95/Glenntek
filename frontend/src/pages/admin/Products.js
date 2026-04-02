@@ -580,14 +580,24 @@ export default function AdminProducts() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="category">Category *</Label>
-                      <Input
-                        id="category"
+                      <Select
                         value={formData.category}
-                        onChange={(e) =>
-                          setFormData({ ...formData, category: e.target.value })
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, category: value })
                         }
-                        required
-                      />
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Category" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat._id} value={cat.name}>
+                              {cat.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <Label htmlFor="sku">SKU *</Label>
@@ -597,7 +607,6 @@ export default function AdminProducts() {
                         onChange={(e) =>
                           setFormData({ ...formData, sku: e.target.value })
                         }
-                        required
                       />
                     </div>
                   </div>
